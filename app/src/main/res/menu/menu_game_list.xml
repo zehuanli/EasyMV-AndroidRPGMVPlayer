@@ -9,6 +9,7 @@
         app:showAsAction="always" />
     <item
         android:id="@+id/menu_settings"
+        android:visible="false"
         android:icon="@drawable/ic_setting_toolbar"
         android:title="@string/menu_settings"
         app:showAsAction="always" />

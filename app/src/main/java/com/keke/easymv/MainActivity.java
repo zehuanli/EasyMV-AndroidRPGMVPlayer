@@ -12,6 +12,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -89,20 +90,14 @@ class GameItemAdapter extends ArrayAdapter<GameItem> {
 public class MainActivity extends AppCompatActivity {
     private ArrayList<GameItem> gameList = new ArrayList<>();
     private GameItemAdapter gameItemAdapter;
-    private ArrayList<String> searchDir = new ArrayList<>();
-    public final int ACTION_PICK_PATH = 1234;
-    TinyDB tinyDB;
+    private File searchDir;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         verifyPermission(this);
-        tinyDB = new TinyDB(this);
-        searchDir = tinyDB.getListString("searchDir");
-        if(searchDir == null) {
-            searchDir = new ArrayList<>();
-        }
+        searchDir = getObbDir();
         gameItemAdapter = new GameItemAdapter(MainActivity.this, R.layout.game_item, gameList);
         ListView listView = findViewById(R.id.game_list);
         listView.setAdapter(gameItemAdapter);
@@ -149,15 +144,15 @@ public class MainActivity extends AppCompatActivity {
 
     public void refresh() {
         gameList.clear();
-        for(String dirString: searchDir) {
-            File dir = new File(dirString);
-            String [] subdir = dir.list();
-            if(subdir == null) continue;
-            for(String title: subdir) {
-                GameItem gameItem = GameItem.fromDir(new File(dir, title));
-                if(gameItem != null) {
-                    gameList.add(gameItem);
-                }
+        Log.d("EasyMV", "refresh: Searching " + searchDir.getPath());
+        String [] subdir = searchDir.list();
+        if(subdir == null) {
+            return;
+        }
+        for(String title: subdir) {
+            GameItem gameItem = GameItem.fromDir(new File(searchDir, title));
+            if(gameItem != null) {
+                gameList.add(gameItem);
             }
         }
         gameItemAdapter.notifyDataSetChanged();
@@ -170,30 +165,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if(requestCode == ACTION_PICK_PATH) {
-            if(resultCode == RESULT_OK && data != null) {
-                ArrayList<String> ret = data.getStringArrayListExtra("paths");
-                if(ret != null) {
-                    searchDir = ret;
-                    tinyDB.putListString("searchDir", ret);
-                    refresh();
-                }
-            }
-        }
-    }
-
-    @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         switch (item.getItemId()) {
             case R.id.menu_refresh:
                 refresh();
-                return true;
-            case R.id.menu_settings:
-                Intent intent = new Intent(this, PathPicker.class);
-                intent.putStringArrayListExtra("paths", searchDir);
-                startActivityForResult(intent, ACTION_PICK_PATH);
                 return true;
         }
         return super.onOptionsItemSelected(item);
