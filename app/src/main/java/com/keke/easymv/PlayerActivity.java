@@ -28,15 +28,15 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.Properties;
 
 class PlayerView extends WebView {
 
@@ -92,7 +92,7 @@ public class PlayerActivity extends AppCompatActivity {
     PlayerConfig playerConfig;
     LocalStorageJavaScriptInterface localStorageFixer;
     private AlertDialog mQuitDialog;
-    private File saveFile;
+    private File saveFolder;
 
     public String getRawString(int id) {
         InputStream is = getResources().openRawResource(id);
@@ -157,7 +157,7 @@ public class PlayerActivity extends AppCompatActivity {
         assert indexPage != null;
         playerConfig = PlayerConfig.fromFile(new File(new File(indexPage).getParentFile(), "EasyMV.properties"));
         playerConfig.indexPage = indexPage;
-        saveFile = new File(new File(indexPage).getParentFile(), "save/EasyMV.save");
+        saveFolder = new File(new File(indexPage).getParentFile(), "save/");
 
         if(playerConfig.BACK_BUTTON_QUITS) {
             createQuitDialog();
@@ -247,53 +247,58 @@ public class PlayerActivity extends AppCompatActivity {
     }
 
     private class LocalStorageJavaScriptInterface {
-        private Properties properties;
-
-        LocalStorageJavaScriptInterface() {
-            properties = new Properties();
-            load();
-        }
-
-        void load() {
-            try {
-                if(!saveFile.exists()) save();
-                properties.load(new FileInputStream(saveFile));
-            } catch (Exception e) {
-                Toast.makeText(getApplicationContext(), R.string.unable_to_load, Toast.LENGTH_SHORT).show();
-            }
-        }
-
-        void save() {
-            try {
-                properties.store(new FileOutputStream(saveFile), "");
-            } catch (Exception e) {
-                Toast.makeText(getApplicationContext(), R.string.unable_to_save, Toast.LENGTH_SHORT).show();
+        public LocalStorageJavaScriptInterface()
+        {
+            if (!saveFolder.isDirectory()) {
+                saveFolder.mkdirs();
             }
         }
 
         @JavascriptInterface
-        public String getItem(String key) {
-            return properties.getProperty(key);
+        public void setItem(String name, String base64Data) {
+            File locate = new File(saveFolder.getPath(), String.format("%s.rpgsave", name));
+            try {
+                if (!locate.exists()) {
+                    locate.createNewFile();
+                }
+                FileOutputStream stream = new FileOutputStream(locate);
+                stream.write(base64Data.getBytes());
+                stream.close();
+            } catch (FileNotFoundException notExistEx) {
+                //TODO : Handle if file doesn't exist.
+            } catch (IOException ioex) {
+                //TODO : Handle if file cannot write.
+            }
         }
 
         @JavascriptInterface
-        public void setItem(String key,String value) {
-            properties.setProperty(key, value);
-            save();
+        public String getItem(String name) {
+            File locate = new File(saveFolder.getPath(), String.format("%s.rpgsave", name));
+            if (!locate.exists()) {
+                return "";
+            }
+            int len = (int)locate.length();
+            byte[] data = new byte[len];
+            try {
+                FileInputStream stream = new FileInputStream(locate);
+                stream.read(data);
+                stream.close();
+            } catch (FileNotFoundException notExistEx) {
+                //TODO : Handle if file doesn't exist.
+                return "";
+            } catch (IOException ioex) {
+                //TODO : Handle if file cannot read.
+                return "";
+            }
+            return new String(data);
         }
 
         @JavascriptInterface
-        public void removeItem(String key)
-        {
-            properties.remove(key);
-            save();
-        }
-
-        @JavascriptInterface
-        public void clear()
-        {
-            properties.clear();
-            save();
+        public void removeItem(String name) {
+            File locate = new File(saveFolder.getPath(), String.format("%s.rpgsave", name));
+            if (locate.exists()) {
+                locate.delete();
+            }
         }
     }
 
@@ -325,10 +330,6 @@ public class PlayerActivity extends AppCompatActivity {
         public void onProgressChanged(WebView view, int newProgress) {
             super.onProgressChanged(view, newProgress);
             if(newProgress == 100) {
-                if(playerConfig.FIX_LOCALSTORAGE) {
-                    String code = getRawString(R.raw.fix_local_storage);
-                    view.evaluateJavascript(code, null);
-                }
                 if(!playerConfig.FORCE_AUDIO_EXT.equals("")) {
                     String code = getString(R.string.force_audio_ext_js);
                     code = code.replace("$1", "\"" + playerConfig.FORCE_AUDIO_EXT + "\"");
@@ -383,6 +384,14 @@ public class PlayerActivity extends AppCompatActivity {
             }
             return super.shouldInterceptRequest(view, request);
         }
-    }
 
+        @Override
+        public void onPageStarted(WebView view, String url, Bitmap favicon) {
+            super.onPageStarted(view, url, favicon);
+            if(playerConfig.FIX_LOCALSTORAGE) {
+                String code = getRawString(R.raw.fix_local_storage);
+                view.evaluateJavascript(code, null);
+            }
+        }
+    }
 }
